@@ -1,98 +1,147 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+"use client"
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { StyleSheet, View, Text, TouchableOpacity } from "react-native"
+import { useEffect } from "react"
+import * as ScreenOrientation from "expo-screen-orientation"
+import { GestureHandlerRootView } from "react-native-gesture-handler"
+import { StatusBar } from "expo-status-bar"
+import { IReactNativeJoystickEvent, JoyStick } from "@/components/joystick";
+import { WebView } from "react-native-webview";
+import useROS from "@/hooks/use-ros";
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const ros = useROS();
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
-  );
+  async function lockOrientation() {
+    await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE)
+  }
+
+  async function unlockOrientation() {
+    await ScreenOrientation.unlockAsync()
+  }
+
+  useEffect(() => {
+    lockOrientation()
+    return () => {
+      unlockOrientation()
+    }
+  }, [])
+
+  const handleJoyMove = (data: IReactNativeJoystickEvent) => {
+    ros.sendVelocity({ y: data.normalized.x, x: data.normalized.y, yaw: data.angle.radian });
+    console.log(data);
+  };
+
+  const handleJoyStart = (data: IReactNativeJoystickEvent) => {
+    console.log(data);
+  };
+
+  const handleJoyStop = (data: IReactNativeJoystickEvent) => {
+    ros.sendVelocity({ x: 0.0, y: 0.0, yaw: 0.0 });
+    console.log(data);
+  };
+
+  return (
+    <GestureHandlerRootView style={styles.container}>
+      <StatusBar hidden />
+
+      {/* Top Left - Image Stream */}
+      <View style={styles.imageStreamContainer}>
+        <WebView source={{ uri: "http://10.80.98.38:8080/stream?topic=/camera/image_raw" }} allowsInlineMediaPlayback={true} />
+      </View>
+
+      {/* Top Right - Status Panel */}
+      <View style={styles.statusPanel}>
+        <View style={styles.statusTabs}>
+          <View style={styles.statusItem}>
+            <Text style={styles.statusLabel}>Battery</Text>
+            <Text style={styles.statusValue}>85%</Text>
+          </View>
+          <View style={styles.statusItem}>
+            <Text style={styles.statusLabel}>Signal</Text>
+            <Text style={styles.statusValue}>Good</Text>
+          </View>
+          <View style={styles.statusItem}>
+            <Text style={styles.statusLabel}>Speed</Text>
+            <Text style={styles.statusValue}>2.5 m/s</Text>
+          </View>
+        </View>
+        <TouchableOpacity style={styles.actionButton}>
+          <Text style={styles.buttonText}>Emergency Stop</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Bottom Right - Joystick */}
+      <View style={styles.joystickContainer}>
+        <JoyStick color="#06b6d4" radius={75} onMove={handleJoyMove} onStop={handleJoyStop} onStart={handleJoyStart} />
+      </View>
+    </GestureHandlerRootView>
+  )
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  container: {
+    flex: 1,
+    backgroundColor: "#000",
+  },
+  imageStreamContainer: {
+    position: "absolute",
+    top: 20,
+    left: 20,
+    width: "60%",
+    height: "70%",
+    borderRadius: 8,
+    overflow: "hidden",
+    borderWidth: 2,
+    borderColor: "#333",
+  },
+  statusPanel: {
+    position: "absolute",
+    top: 20,
+    right: 20,
+    backgroundColor: "rgba(30, 30, 30, 0.9)",
+    borderRadius: 12,
+    padding: 16,
+    minWidth: 200,
+    gap: 12,
+  },
+  statusTabs: {
     gap: 8,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  statusItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: "rgba(50, 50, 50, 0.8)",
+    borderRadius: 6,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  statusLabel: {
+    color: "#999",
+    fontSize: 12,
+    fontWeight: "600",
   },
-});
+  statusValue: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+  actionButton: {
+    backgroundColor: "#ff3b30",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  buttonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+  joystickContainer: {
+    position: "absolute",
+    bottom: 40,
+    right: 40,
+  },
+})
