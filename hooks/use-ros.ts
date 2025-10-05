@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import Constants from 'expo-constants';
 
-import ROSLIB from 'roslib';
+import * as ROSLIB from '@tier4/roslibjs-foxglove';
 
 export interface IJoyCommand {
   x: number;
@@ -11,43 +12,62 @@ export interface IJoyCommand {
 };
 
 export default function useROS() {
-  const [ros, setRos] = useState<ROSLIB.Ros | null>(null);
-  const [cmd_vel, set_cmd_vel] = useState<ROSLIB.Topic>(null);
+  const rosRef = useRef<ROSLIB.Ros | null>(null);
+  const cmdVelRef = useRef<ROSLIB.Topic | null>(null);
+  const [connected, setConnected] = useState<boolean>(false);
 
 
   useEffect(() => {
-    const ros_ = new ROSLIB.Ros({
-      url: 'ws://10.80.98.38:9090',
+    const wsConfig = Constants.expoConfig?.extra?.ws;
+    if (wsConfig == null) {
+      console.error("Missing websocket config")
+      return;
+    }
+    const ros = new ROSLIB.Ros({
+      url: `${wsConfig.protocol}://${wsConfig.url}`,
     });
-    setRos(ros_);
 
-    ros_.on('connection', function() {
+    ros.on('connection', function() {
+      setConnected(true);
       console.log('Connected to websocket server');
     });
 
-    ros_.on('close', function() {
+    ros.on('close', function() {
+      setConnected(false);
       console.log('Connection closed.');
     })
 
-    const cmd_vel_ = new ROSLIB.Topic({
-      ros: ros_,
+    ros.on("error", (error: any) => {
+      setConnected(false);
+      console.log("[v0] Error connecting to ROS websocket server: ", error)
+    })
+
+    const cmdVel = new ROSLIB.Topic({
+      ros: ros,
       name: '/joy',
       messageType: 'sensor_msgs/Joy',
     });
 
-    set_cmd_vel(cmd_vel_);
+    rosRef.current = ros
+    cmdVelRef.current = cmdVel
+
+
+    return () => {
+      ros.close()
+    }
+
   }, []);
 
   const sendVelocity = (vel: IJoyCommand) => {
-     const joy = new ROSLIB.Message({
+    const joy = new ROSLIB.Message({
       axes: [-vel.y, vel.x, 0.0, 0.0],
       buttons: [],
     });
 
-    cmd_vel.publish(joy);
+    cmdVelRef.current.publish(joy);
   };
 
-  return { sendVelocity };
+  return { ros: rosRef.current, sendVelocity, connected };
 
 }
 
