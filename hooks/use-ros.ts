@@ -1,7 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from "react";
-import Constants from 'expo-constants';
+import { useRef, useState } from "react";
 
 import * as ROSLIB from '@tier4/roslibjs-foxglove';
 
@@ -16,17 +15,25 @@ export default function useROS() {
   const cmdVelRef = useRef<ROSLIB.Topic | null>(null);
   const [connected, setConnected] = useState<boolean>(false);
 
-
-  useEffect(() => {
-    const wsConfig = Constants.expoConfig?.extra?.ws;
-    if (wsConfig == null) {
-      console.error("Missing websocket config")
-      return;
+  const disconnect = () => {
+    if (rosRef.current != null) {
+      rosRef.current.close();
+      cmdVelRef.current = null;
+      rosRef.current = null;
     }
-    const ros = new ROSLIB.Ros({
-      url: `${wsConfig.protocol}://${wsConfig.url}`,
-    });
+    if (connected) {
+      setConnected(false);
+    }
+  }
 
+  const connect = (url: string) => {
+    if (connected) {
+      disconnect();
+    }
+
+    const ros = new ROSLIB.Ros({
+      url: url,
+    });
     ros.on('connection', function() {
       setConnected(true);
       console.log('Connected to websocket server');
@@ -51,14 +58,14 @@ export default function useROS() {
     rosRef.current = ros
     cmdVelRef.current = cmdVel
 
-
-    return () => {
-      ros.close()
-    }
-
-  }, []);
+    setConnected(true);
+  }
 
   const sendVelocity = (vel: IJoyCommand) => {
+    if (cmdVelRef.current == null) {
+      console.warn('Publishing on a closed connection')
+      return;
+    }
     const joy = new ROSLIB.Message({
       axes: [-vel.y, vel.x, 0.0, 0.0],
       buttons: [],
@@ -67,7 +74,7 @@ export default function useROS() {
     cmdVelRef.current.publish(joy);
   };
 
-  return { ros: rosRef.current, sendVelocity, connected };
+  return { ros: rosRef.current, sendVelocity, connected, connect, disconnect };
 
 }
 
