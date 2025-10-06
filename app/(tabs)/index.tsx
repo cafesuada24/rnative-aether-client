@@ -1,6 +1,6 @@
 "use client"
 
-import { StyleSheet, View, Text, TouchableOpacity } from "react-native"
+import { StyleSheet, View, Text, TouchableOpacity, Alert } from "react-native"
 import { useEffect, useState } from "react"
 import * as ScreenOrientation from "expo-screen-orientation"
 import { GestureHandlerRootView, ScrollView } from "react-native-gesture-handler"
@@ -8,19 +8,41 @@ import { StatusBar } from "expo-status-bar"
 import { IReactNativeJoystickEvent, JoyStick } from "@/components/joystick";
 import { WebView } from "react-native-webview";
 import useROS from "@/hooks/use-ros";
-import Constants from "expo-constants"
 import MapViewer from "@/components/map-viewer"
+import AsyncStorage from "@react-native-async-storage/async-storage"
+import { useRouter } from "expo-router"
 
 type TabType = "status" | "log" | "progress"
 type DisplayMode = "camera" | "map"
 
-export default function HomeScreen() {
-  const ros = useROS();
+const SELECTED_SERVICE_KEY = "@selected_service"
 
+export default function HomeScreen() {
+  const router = useRouter();
+  const ros = useROS();
   const [activeTab, setActiveTab] = useState<TabType>("status")
   const [displayMode, setDisplayMode] = useState<DisplayMode>("camera")
   const [logs, setLogs] = useState<string[]>(["System initialized", "Connected to ROS", "Camera stream active"])
+  const [serviceUrl, setServiceUrl] = useState<string | null>(null)
+  const [serviceHost, setServiceHost] = useState<string | null>(null); 
 
+  const checkConnection = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(SELECTED_SERVICE_KEY)
+      if (stored) {
+        const { url, host } = JSON.parse(stored)
+        setServiceUrl(url)
+        setServiceHost(host)
+        ros.connect(url)
+        setLogs((prev) => [...prev, `Connecting to ${url}...`])
+      } else {
+        router.replace("./connect")
+      }
+    } catch (error) {
+      console.log("[v0] Error checking connection:", error)
+      router.replace("./connect")
+    }
+  }
   async function lockOrientation() {
     await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE)
   }
@@ -28,6 +50,19 @@ export default function HomeScreen() {
   async function unlockOrientation() {
     await ScreenOrientation.unlockAsync()
   }
+
+  useEffect(() => {
+    checkConnection()
+  }, [])
+
+  useEffect(() => {
+    if (ros.connected) {
+      setLogs((prev) => [...prev, "Connected to ROS", "Camera stream active"])
+    } else {
+      setLogs((prev) => [...prev, "Disconnected to ROS"])
+    }
+  }, [ros.connected])
+
 
   useEffect(() => {
     lockOrientation()
@@ -49,11 +84,32 @@ export default function HomeScreen() {
     ros.sendVelocity({ x: 0.0, y: 0.0, yaw: 0.0 });
     console.log(data);
   };
+
+  const handleDisconnect = () => {
+    Alert.alert("Disconnect", "Are you sure you want to disconnect?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Disconnect",
+        style: "destructive",
+        onPress: async () => {
+          ros.disconnect()
+          await AsyncStorage.removeItem(SELECTED_SERVICE_KEY)
+          router.replace("./connect")
+        },
+      },
+    ])
+  }
   const renderTabContent = () => {
     switch (activeTab) {
       case "status":
         return (
           <View style={styles.tabContent}>
+            <View style={styles.statusItem}>
+              <Text style={styles.statusLabel}>Connection</Text>
+              <Text style={[styles.statusValue, { color: ros.connected ? "#10b981" : "#ef4444" }]}>
+                {ros.connected ? "Connected" : "Disconnected"}
+              </Text>
+            </View>
             <View style={styles.statusItem}>
               <Text style={styles.statusLabel}>Battery</Text>
               <Text style={styles.statusValue}>85%</Text>
@@ -115,12 +171,12 @@ export default function HomeScreen() {
 
         {displayMode === "camera" ? (
           <WebView
-            source={{ uri: Constants.expoConfig?.extra?.imageStreamSourceUri || "http://localhost:8080/stream" }}
+            source={{ uri: `http://${serviceHost}:8080/stream?topic=/camera/image_raw` }}
             allowsInlineMediaPlayback={true}
             style={styles.webview}
           />
         ) : (
-          <MapViewer /> 
+          <MapViewer />
         )}
       </View>
 
@@ -148,10 +204,9 @@ export default function HomeScreen() {
         </View>
 
         {renderTabContent()}
-
-        {/* Emergency Stop Button */}
-        <TouchableOpacity style={styles.actionButton}>
-          <Text style={styles.buttonText}>Emergency Stop</Text>
+        {/* Disconnect Button */}
+        <TouchableOpacity style={styles.disconnectButton} onPress={handleDisconnect}>
+          <Text style={styles.buttonText}>Disconnect</Text>
         </TouchableOpacity>
       </View>
 
@@ -309,5 +364,12 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: 40,
     right: 40,
+  },
+  disconnectButton: {
+    backgroundColor: "#6b7280",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: "center",
   },
 })
