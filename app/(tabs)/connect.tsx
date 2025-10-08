@@ -23,7 +23,7 @@ export default function ConnectScreen() {
       // Navigate to control screen
       router.push("./")
     } catch (error) {
-      Alert.alert("Error", "Failed to connect to service")
+      Alert.alert("Error", `Failed to connect to service: ${error}`)
     }
   }
 
