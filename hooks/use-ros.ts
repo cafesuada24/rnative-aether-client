@@ -13,12 +13,16 @@ export interface IJoyCommand {
 export default function useROS() {
   const rosRef = useRef<ROSLIB.Ros | null>(null);
   const cmdVelRef = useRef<ROSLIB.Topic | null>(null);
+  const chatServiceRef = useRef<ROSLIB.Service | null>(null);
+  const getWaypointsServiceRef = useRef<ROSLIB.Service | null>(null);
   const [connected, setConnected] = useState<boolean>(false);
 
   const disconnect = () => {
     if (rosRef.current != null) {
       rosRef.current.close();
       cmdVelRef.current = null;
+      chatServiceRef.current = null;
+      getWaypointsServiceRef.current = null;
       rosRef.current = null;
     }
     if (connected) {
@@ -46,7 +50,7 @@ export default function useROS() {
 
     ros.on("error", (error: any) => {
       setConnected(false);
-      console.log("[v0] Error connecting to ROS websocket server: ", error)
+      console.log("Error connecting to ROS websocket server: ", error)
     })
 
     const cmdVel = new ROSLIB.Topic({
@@ -55,8 +59,23 @@ export default function useROS() {
       messageType: 'sensor_msgs/Joy',
     });
 
+    const chatService = new ROSLIB.Service({
+      ros: ros,
+      name: '/prompt',
+      serviceType: 'aether_interfaces/LLMPrompt',
+    })
+
+
+    const getWaypointsService = new ROSLIB.Service({
+      ros: ros,
+      name: '/get_waypoints',
+      serviceType: 'aether_interfaces/GetWaypoints',
+    })
+
     rosRef.current = ros
     cmdVelRef.current = cmdVel
+    chatServiceRef.current = chatService
+    getWaypointsServiceRef.current = getWaypointsService;
 
     setConnected(true);
   }
@@ -74,7 +93,7 @@ export default function useROS() {
     cmdVelRef.current.publish(joy);
   };
 
-  return { ros: rosRef.current, sendVelocity, connected, connect, disconnect };
+  return { ros: rosRef.current, sendVelocity, connected, connect, disconnect, getWaypoints: getWaypointsServiceRef.current, chatService: chatServiceRef.current };
 
 }
 
