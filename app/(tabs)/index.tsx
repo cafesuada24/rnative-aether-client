@@ -17,7 +17,7 @@ type DisplayMode = "camera" | "map"
 interface Waypoint {
   id: string
   name: string
-  coordinate: {x: number, y: number}
+  coordinate: { x: number, y: number }
 }
 interface ChatSrvResponse {
   response: string
@@ -44,7 +44,7 @@ export default function HomeScreen() {
   }
 
   useEffect(() => {
-    const getWaypointsSrvCallback = (response: { waypoints: Waypoint[]}) => {
+    const getWaypointsSrvCallback = (response: { waypoints: Waypoint[] }) => {
       for (let i = 0; i < response.waypoints.length; ++i) {
         response.waypoints[i].id = i.toString();
       }
@@ -161,6 +161,16 @@ export default function HomeScreen() {
     { value: "chat", label: "Chat" },
     { value: "waypoints", label: "Waypoints" },
   ]
+
+  const statusStr = {
+    0: 'Not navigating',
+    1: 'Accepted',
+    2: 'Executing',
+    3: 'Cancelling',
+    4: 'Success',
+    5: 'Cancelled',
+    6: 'Aborted',
+  }
   const renderTabContent = () => {
     switch (activeTab) {
       case "status":
@@ -204,15 +214,15 @@ export default function HomeScreen() {
               <View style={styles.progressBar}>
                 <View style={[styles.progressFill, { width: "65%" }]} />
               </View>
-              <Text style={styles.progressText}>6.5 / 10.0 m</Text>
-            </View>
-            <View style={styles.statusItem}>
-              <Text style={styles.statusLabel}>Waypoints</Text>
-              <Text style={styles.statusValue}>3 / 5</Text>
+              <Text style={styles.progressText}>{(ros.navFeedback?.distance_remaining_meter ?? 0).toFixed(2)} m</Text>
             </View>
             <View style={styles.statusItem}>
               <Text style={styles.statusLabel}>ETA</Text>
-              <Text style={styles.statusValue}>2:30 min</Text>
+              <Text style={styles.statusValue}>{ros.navFeedback?.ETA ?? 0} sec</Text>
+            </View>
+            <View style={styles.statusItem}>
+              <Text style={styles.statusLabel}>Status</Text>
+              <Text style={styles.statusValue}>{statusStr[ros.navStatus]}</Text>
             </View>
           </View>
         )
