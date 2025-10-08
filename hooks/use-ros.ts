@@ -10,7 +10,7 @@ export interface IJoyCommand {
   yaw: number;
 };
 
-export interface NavFeedback {
+export interface INavFeedback {
   nav_time_sec: number;
   ETA: number;
   distance_remaining_meter: number;
@@ -24,7 +24,7 @@ export default function useROS() {
   const getWaypointsServiceRef = useRef<ROSLIB.Service | null>(null);
   const navActionFeedbackSubRef = useRef<ROSLIB.Topic | null>(null);
   const navActionStatusSubRef = useRef<ROSLIB.Topic | null>(null);
-  const [navFeedback, setNavFeedback] = useState<NavFeedback | null>(null);
+  const [navFeedback, setNavFeedback] = useState<INavFeedback | null>(null);
   const [navStatus, setNavStatus] = useState<NavStatusType>(0)
   const [connected, setConnected] = useState<boolean>(false);
 
