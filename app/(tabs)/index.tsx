@@ -1,6 +1,6 @@
 "use client"
 
-import { StyleSheet, View, Text, TouchableOpacity, Alert } from "react-native"
+import { StyleSheet, View, Text, TouchableOpacity, Alert, Modal, TextInput } from "react-native"
 import { useEffect, useState } from "react"
 import * as ScreenOrientation from "expo-screen-orientation"
 import { GestureHandlerRootView, ScrollView } from "react-native-gesture-handler"
@@ -12,9 +12,16 @@ import MapViewer from "@/components/map-viewer"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import { useRouter } from "expo-router"
 
-type TabType = "status" | "log" | "progress"
+type TabType = "status" | "log" | "progress" | "chat" | "waypoints"
 type DisplayMode = "camera" | "map"
-
+interface Waypoint {
+  id: string
+  name: string
+  coordinate: {x: number, y: number}
+}
+interface ChatSrvResponse {
+  response: string
+}
 const SELECTED_SERVICE_KEY = "@selected_service"
 
 export default function HomeScreen() {
@@ -22,9 +29,38 @@ export default function HomeScreen() {
   const ros = useROS();
   const [activeTab, setActiveTab] = useState<TabType>("status")
   const [displayMode, setDisplayMode] = useState<DisplayMode>("camera")
-  const [logs, setLogs] = useState<string[]>(["System initialized", "Connected to ROS", "Camera stream active"])
+  const [logs, setLogs] = useState<string[]>([])
   const [serviceUrl, setServiceUrl] = useState<string | null>(null)
-  const [serviceHost, setServiceHost] = useState<string | null>(null); 
+  const [serviceHost, setServiceHost] = useState<string | null>(null);
+  const [dropdownVisible, setDropdownVisible] = useState(false)
+  const [chatMessages, setChatMessages] = useState<{ text: string; sender: "user" | "bot" }[]>([
+    { text: "Hello! How can I assist you?", sender: "bot" },
+  ])
+  const [waypoints, setWaypoints] = useState<Waypoint[]>([
+  ])
+
+  const addLog = (logMsg: string) => {
+    setLogs(l => [...l, logMsg])
+  }
+
+  useEffect(() => {
+    const getWaypointsSrvCallback = (response: { waypoints: Waypoint[]}) => {
+      for (let i = 0; i < response.waypoints.length; ++i) {
+        response.waypoints[i].id = i.toString();
+      }
+      setWaypoints(response.waypoints)
+    }
+    const getWaypointsSrvFailedCallback = (error: string) => {
+      addLog(`Err: ${error}`)
+    }
+    ros.getWaypoints?.callService(null, getWaypointsSrvCallback, getWaypointsSrvFailedCallback)
+  }, [ros.getWaypoints])
+
+  const handleJoyMove = (data: IReactNativeJoystickEvent) => {
+    ros.sendVelocity({ y: data.normalized.x, x: data.normalized.y, yaw: data.angle.radian });
+    console.log(data);
+  };
+  const [chatInput, setChatInput] = useState("")
 
   const checkConnection = async () => {
     try {
@@ -39,7 +75,7 @@ export default function HomeScreen() {
         router.replace("./connect")
       }
     } catch (error) {
-      console.log("[v0] Error checking connection:", error)
+      console.log("[Err] Error checking connection:", error)
       router.replace("./connect")
     }
   }
@@ -71,11 +107,6 @@ export default function HomeScreen() {
     }
   }, [])
 
-  const handleJoyMove = (data: IReactNativeJoystickEvent) => {
-    ros.sendVelocity({ y: data.normalized.x, x: data.normalized.y, yaw: data.angle.radian });
-    console.log(data);
-  };
-
   const handleJoyStart = (data: IReactNativeJoystickEvent) => {
     console.log(data);
   };
@@ -99,6 +130,37 @@ export default function HomeScreen() {
       },
     ])
   }
+
+  const chatSrvReponseCallback = (response: ChatSrvResponse) => {
+    setChatMessages((prev) => {
+      const modified = [...prev]
+      modified[modified.length - 1].text = response.response;
+      return modified
+    })
+  }
+  const chatSrvReponseFailedCallback = (error: string) => {
+    setChatMessages((prev) => [...prev, { text: `An error occured while processing your request, ${error}`, sender: "bot" }])
+  }
+  const handleSendMessage = () => {
+    if (chatInput.trim()) {
+      setChatMessages((prev) => [...prev, { text: chatInput, sender: "user" }])
+      // Simulate bot response
+
+      setTimeout(() => {
+        ros.chatService?.callService({ 'prompt': chatInput }, chatSrvReponseCallback, chatSrvReponseFailedCallback)
+        setChatMessages((prev) => [...prev, { text: "I received your message. Processing...", sender: "bot" }])
+      }, 500)
+      setChatInput("")
+    }
+  }
+
+  const tabOptions: { value: TabType; label: string }[] = [
+    { value: "status", label: "Status" },
+    { value: "log", label: "Log" },
+    { value: "progress", label: "Progress" },
+    { value: "chat", label: "Chat" },
+    { value: "waypoints", label: "Waypoints" },
+  ]
   const renderTabContent = () => {
     switch (activeTab) {
       case "status":
@@ -154,6 +216,49 @@ export default function HomeScreen() {
             </View>
           </View>
         )
+      case "chat":
+        return (
+          <View style={styles.chatContainer}>
+            <ScrollView style={styles.chatMessages}>
+              {chatMessages.map((msg, index) => (
+                <View
+                  key={index}
+                  style={[styles.chatBubble, msg.sender === "user" ? styles.chatBubbleUser : styles.chatBubbleBot]}
+                >
+                  <Text style={styles.chatText}>{msg.text}</Text>
+                </View>
+              ))}
+            </ScrollView>
+            <View style={styles.chatInputContainer}>
+              <TextInput
+                style={styles.chatInput}
+                value={chatInput}
+                onChangeText={setChatInput}
+                placeholder="Type a message..."
+                placeholderTextColor="#666"
+                onSubmitEditing={handleSendMessage}
+              />
+              <TouchableOpacity style={styles.chatSendButton} onPress={handleSendMessage}>
+                <Text style={styles.chatSendButtonText}>Send</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )
+      case "waypoints":
+        return (
+          <ScrollView style={styles.waypointsContainer}>
+            {waypoints.map((waypoint) => (
+              <View key={waypoint.id} style={styles.waypointItem}>
+                <View style={styles.waypointInfo}>
+                  <Text style={styles.waypointName}>{waypoint.name}</Text>
+                  <Text style={styles.waypointCoords}>
+                    ({waypoint.coordinate.x.toFixed(1)}, {waypoint.coordinate.y.toFixed(1)})
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+        )
     }
   }
 
@@ -181,39 +286,52 @@ export default function HomeScreen() {
       </View>
 
       {/* Top Right - Status Panel */}
-      <View style={styles.statusPanel}>
-        <View style={styles.tabNavigation}>
-          <TouchableOpacity
-            style={[styles.tabButton, activeTab === "status" && styles.tabButtonActive]}
-            onPress={() => setActiveTab("status")}
-          >
-            <Text style={[styles.tabButtonText, activeTab === "status" && styles.tabButtonTextActive]}>Status</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tabButton, activeTab === "log" && styles.tabButtonActive]}
-            onPress={() => setActiveTab("log")}
-          >
-            <Text style={[styles.tabButtonText, activeTab === "log" && styles.tabButtonTextActive]}>Log</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tabButton, activeTab === "progress" && styles.tabButtonActive]}
-            onPress={() => setActiveTab("progress")}
-          >
-            <Text style={[styles.tabButtonText, activeTab === "progress" && styles.tabButtonTextActive]}>Progress</Text>
-          </TouchableOpacity>
-        </View>
 
-        {renderTabContent()}
-        {/* Disconnect Button */}
-        <TouchableOpacity style={styles.disconnectButton} onPress={handleDisconnect}>
-          <Text style={styles.buttonText}>Disconnect</Text>
+      <View style={styles.statusPanel}>
+        <TouchableOpacity style={styles.dropdown} onPress={() => setDropdownVisible(true)}>
+          <Text style={styles.dropdownText}>
+            {tabOptions.find((opt) => opt.value === activeTab)?.label || "Select"}
+          </Text>
+          <Text style={styles.dropdownArrow}>▼</Text>
         </TouchableOpacity>
+
+        <Modal
+          visible={dropdownVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setDropdownVisible(false)}
+        >
+          <TouchableOpacity style={styles.modalOverlay} onPress={() => setDropdownVisible(false)}>
+            <View style={styles.dropdownMenu}>
+              {tabOptions.map((option) => (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[styles.dropdownItem, activeTab === option.value && styles.dropdownItemActive]}
+                  onPress={() => {
+                    setActiveTab(option.value)
+                    setDropdownVisible(false)
+                  }}
+                >
+                  <Text style={[styles.dropdownItemText, activeTab === option.value && styles.dropdownItemTextActive]}>
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </TouchableOpacity>
+        </Modal>
+        {renderTabContent()}
       </View>
 
       {/* Bottom Right - Joystick */}
       <View style={styles.joystickContainer}>
         <JoyStick color="#06b6d4" radius={75} onMove={handleJoyMove} onStop={handleJoyStop} onStart={handleJoyStart} />
       </View>
+
+      {/* Disconnect Button */}
+      <TouchableOpacity style={styles.disconnectButton} onPress={handleDisconnect}>
+        <Text style={styles.buttonText}>Disconnect</Text>
+      </TouchableOpacity>
     </GestureHandlerRootView>
   )
 }
@@ -260,31 +378,55 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     minWidth: 280,
+    maxHeight: "80%",
     gap: 12,
   },
-  tabNavigation: {
+  dropdown: {
     flexDirection: "row",
-    backgroundColor: "rgba(50, 50, 50, 0.5)",
-    borderRadius: 8,
-    padding: 4,
-    gap: 4,
-  },
-  tabButton: {
-    flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
+    justifyContent: "space-between",
     alignItems: "center",
+    backgroundColor: "rgba(50, 50, 50, 0.8)",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
   },
-  tabButtonActive: {
-    backgroundColor: "#06b6d4",
-  },
-  tabButtonText: {
-    color: "#999",
-    fontSize: 12,
+  dropdownText: {
+    color: "#fff",
+    fontSize: 14,
     fontWeight: "600",
   },
-  tabButtonTextActive: {
+  dropdownArrow: {
+    color: "#999",
+    fontSize: 12,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  dropdownMenu: {
+    backgroundColor: "rgba(30, 30, 30, 0.95)",
+    borderRadius: 12,
+    minWidth: 200,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: "#333",
+  },
+  dropdownItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+  },
+  dropdownItemActive: {
+    backgroundColor: "#06b6d4",
+  },
+  dropdownItemText: {
+    color: "#999",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  dropdownItemTextActive: {
     color: "#fff",
   },
   tabContent: {
@@ -348,6 +490,104 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 4,
   },
+  chatContainer: {
+    height: 300,
+    gap: 8,
+  },
+  chatMessages: {
+    flex: 1,
+  },
+  chatBubble: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginBottom: 8,
+    maxWidth: "80%",
+  },
+  chatBubbleUser: {
+    backgroundColor: "#06b6d4",
+    alignSelf: "flex-end",
+  },
+  chatBubbleBot: {
+    backgroundColor: "rgba(50, 50, 50, 0.8)",
+    alignSelf: "flex-start",
+  },
+  chatText: {
+    color: "#fff",
+    fontSize: 13,
+  },
+  chatInputContainer: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  chatInput: {
+    flex: 1,
+    backgroundColor: "rgba(50, 50, 50, 0.8)",
+    color: "#fff",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    fontSize: 13,
+  },
+  chatSendButton: {
+    backgroundColor: "#06b6d4",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+    justifyContent: "center",
+  },
+  chatSendButtonText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  waypointsContainer: {
+    maxHeight: 300,
+  },
+  waypointItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: "rgba(50, 50, 50, 0.8)",
+    borderRadius: 6,
+    marginBottom: 6,
+  },
+  waypointInfo: {
+    flex: 1,
+  },
+  waypointName: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+  waypointCoords: {
+    color: "#999",
+    fontSize: 11,
+  },
+  waypointStatus: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  waypointStatusCompleted: {
+    backgroundColor: "#10b981",
+  },
+  waypointStatusActive: {
+    backgroundColor: "#06b6d4",
+  },
+  waypointStatusPending: {
+    backgroundColor: "#6b7280",
+  },
+  waypointStatusText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "bold",
+  },
   actionButton: {
     backgroundColor: "#ff3b30",
     paddingVertical: 12,
@@ -366,6 +606,9 @@ const styles = StyleSheet.create({
     right: 40,
   },
   disconnectButton: {
+    position: "absolute",
+    bottom: 40,
+    left: 40,
     backgroundColor: "#6b7280",
     paddingVertical: 12,
     paddingHorizontal: 16,
