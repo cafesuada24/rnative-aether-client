@@ -9,7 +9,8 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.anonymous.rnativeaetherclient"
     },
     "android": {
       "adaptiveIcon": {
@@ -45,6 +46,14 @@
         {
           "initialOrientation": "LANDSCAPE"
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
       ]
     ],
     "experiments": {
@@ -56,7 +65,12 @@
         "protocol": "ws",
         "url": "192.168.1.7:8765"
       },
-      "imageStreamSourceUri": "http://192.168.1.7:8080/stream?topic=/camera/image_raw"
-    }
+      "imageStreamSourceUri": "http://192.168.1.7:8080/stream?topic=/camera/image_raw",
+      "router": {},
+      "eas": {
+        "projectId": "d162aa21-1f04-4145-b6f6-56669beec296"
+      }
+    },
+    "owner": "hahsmgcd220009"
   }
 }

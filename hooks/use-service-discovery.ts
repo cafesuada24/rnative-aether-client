@@ -7,7 +7,7 @@ import * as ServiceDiscovery from "@inthepocket/react-native-service-discovery"
 export interface RobotService {
   id: string
   name: string
-  url: string
+  // protocol: string,
   host: string
   port: number
   lastConnected?: number
@@ -56,12 +56,10 @@ export function useServiceDiscovery() {
       console.log('Service found:', service);
       const host = service.hostName || service.addresses[0]
       const port = service.port || 9090
-      const url = `ws://${host}:${port}`
 
       discovered.push({
         id: `${host}:${port}`,
         name: service.name || `Robot (${host})`,
-        url,
         host,
         port,
       })
@@ -91,18 +89,14 @@ export function useServiceDiscovery() {
 
 
   // Add a service manually
-  const addService = async (name: string, url: string) => {
+  const addService = async (name: string, host: string, port: string) => {
     // Parse URL to extract host and port
-    const match = url.match(/ws:\/\/([^:]+):(\d+)/)
-    const host = match?.[1]
-    const port = match?.[2] ? Number.parseInt(match[2]) : 9090
 
     const newService: RobotService = {
-      id: url,
+      id: `ws://${host}:${port}`,
       name,
-      url,
       host,
-      port,
+      port: parseInt(port),
     }
     await saveServices([...services, newService])
   }

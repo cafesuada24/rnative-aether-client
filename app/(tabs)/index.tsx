@@ -7,7 +7,7 @@ import { GestureHandlerRootView, ScrollView } from "react-native-gesture-handler
 import { StatusBar } from "expo-status-bar"
 import { IReactNativeJoystickEvent, JoyStick } from "@/components/joystick";
 import { WebView } from "react-native-webview";
-import useROS from "@/hooks/use-ros";
+import { useROS } from "@/context/ROSContext"
 import MapViewer from "@/components/map-viewer"
 import AsyncStorage from "@react-native-async-storage/async-storage"
 import { useRouter } from "expo-router"
@@ -44,17 +44,22 @@ export default function HomeScreen() {
   }
 
   useEffect(() => {
-    const getWaypointsSrvCallback = (response: { waypoints: Waypoint[] }) => {
-      for (let i = 0; i < response.waypoints.length; ++i) {
-        response.waypoints[i].id = i.toString();
-      }
-      setWaypoints(response.waypoints)
+    if (!ros.connected) {
+      router.replace("./connect")
     }
-    const getWaypointsSrvFailedCallback = (error: string) => {
-      addLog(`Err: ${error}`)
-    }
-    ros.getWaypoints?.callService(null, getWaypointsSrvCallback, getWaypointsSrvFailedCallback)
-  }, [ros.getWaypoints])
+  }, [ros.connected, router])
+  // useEffect(() => {
+  //   const getWaypointsSrvCallback = (response: { waypoints: Waypoint[] }) => {
+  //     for (let i = 0; i < response.waypoints.length; ++i) {
+  //       response.waypoints[i].id = i.toString();
+  //     }
+  //     setWaypoints(response.waypoints)
+  //   }
+  //   const getWaypointsSrvFailedCallback = (error: string) => {
+  //     addLog(`Err: ${error}`)
+  //   }
+  //   ros.getWaypoints?.callService(null, getWaypointsSrvCallback, getWaypointsSrvFailedCallback)
+  // }, [ros.getWaypoints])
 
   const handleJoyMove = (data: IReactNativeJoystickEvent) => {
     ros.sendVelocity({ y: data.normalized.x, x: data.normalized.y, yaw: data.angle.radian });
@@ -62,23 +67,21 @@ export default function HomeScreen() {
   };
   const [chatInput, setChatInput] = useState("")
 
-  const checkConnection = async () => {
-    try {
-      const stored = await AsyncStorage.getItem(SELECTED_SERVICE_KEY)
-      if (stored) {
-        const { url, host } = JSON.parse(stored)
-        setServiceUrl(url)
-        setServiceHost(host)
-        ros.connect(url)
-        setLogs((prev) => [...prev, `Connecting to ${url}...`])
-      } else {
-        router.replace("./connect")
-      }
-    } catch (error) {
-      console.log("[Err] Error checking connection:", error)
-      router.replace("./connect")
-    }
-  }
+  // const checkConnection = async () => {
+  //   try {
+  //     const stored = await AsyncStorage.getItem(SELECTED_SERVICE_KEY)
+  //     if (stored) {
+  //       const { url, host } = JSON.parse(stored)
+  //       setServiceUrl(url)
+  //       setServiceHost(host)
+  //       ros.connect(url)
+  //       setLogs((prev) => [...prev, `Connecting to ${url}...`])
+  //     }
+  //   } catch (error) {
+  //     console.log("[Err] Error checking connection:", error)
+  //     router.replace("./connect")
+  //   }
+  // }
   async function lockOrientation() {
     await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE)
   }
@@ -87,9 +90,9 @@ export default function HomeScreen() {
     await ScreenOrientation.unlockAsync()
   }
 
-  useEffect(() => {
-    checkConnection()
-  }, [])
+  // useEffect(() => {
+  //   checkConnection()
+  // }, [])
 
   useEffect(() => {
     if (ros.connected) {
@@ -187,12 +190,12 @@ export default function HomeScreen() {
               <Text style={styles.statusValue}>85%</Text>
             </View>
             <View style={styles.statusItem}>
-              <Text style={styles.statusLabel}>Signal</Text>
+              <Text style={styles.statusLabel}>Ping</Text>
               <Text style={styles.statusValue}>Good</Text>
             </View>
             <View style={styles.statusItem}>
               <Text style={styles.statusLabel}>Speed</Text>
-              <Text style={styles.statusValue}>2.5 m/s</Text>
+              <Text style={styles.statusValue}>{(Math.round((ros.odom?.twist.twist.linear.x ?? 0.0) * 100) / 100.0).toPrecision(2)} m/s</Text>
             </View>
           </View>
         )
@@ -286,7 +289,7 @@ export default function HomeScreen() {
 
         {displayMode === "camera" ? (
           <WebView
-            source={{ uri: `http://${serviceHost}:8080/stream?topic=/camera/image_raw` }}
+            source={{ uri: `http://${ros.currentHost}:8080/stream?topic=/camera/image_raw` }}
             allowsInlineMediaPlayback={true}
             style={styles.webview}
           />

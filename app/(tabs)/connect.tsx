@@ -1,11 +1,11 @@
 "use client"
 
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, Alert } from "react-native"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "expo-router"
 import { StatusBar } from "expo-status-bar"
 import { useServiceDiscovery } from "@/hooks/use-service-discovery"
-import AsyncStorage from "@react-native-async-storage/async-storage"
+import { useROS } from "@/context/ROSContext"
 
 const SELECTED_SERVICE_KEY = "@selected_service"
 
@@ -14,33 +14,54 @@ export default function ConnectScreen() {
   const { services, discovering, loading, discoverServices, addService, removeService } = useServiceDiscovery()
   const [showAddForm, setShowAddForm] = useState(false)
   const [newServiceName, setNewServiceName] = useState("")
-  const [newServiceUrl, setNewServiceUrl] = useState("ws://")
+  const [newServiceAddress, setNewServiceAddress] = useState("")
+  const [newServicePort, setNewServicePort] = useState("8765");
+  const ros = useROS()
 
-  const handleConnect = async (serviceId: string, serviceUrl: string, serviceHost: string) => {
+  useEffect(() => {
+    if (ros.connected) {
+      router.replace("./")
+    }
+  }, [ros.connected, router])
+
+  const handleConnect = async (serviceId: string, serviceHost: string, servicePort: string) => {
     try {
       // Save selected service
-      await AsyncStorage.setItem(SELECTED_SERVICE_KEY, JSON.stringify({ id: serviceId, url: serviceUrl, host: serviceHost }))
+      // await AsyncStorage.setItem(SELECTED_SERVICE_KEY, JSON.stringify({ id: serviceId, url: serviceUrl, host: serviceHost }))
+      ros.connect(serviceHost, servicePort)
+      
       // Navigate to control screen
-      router.push("./")
+      // router.push("./")
     } catch (error) {
       Alert.alert("Error", `Failed to connect to service: ${error}`)
     }
   }
 
+  const validateURL = () => {
+    if (!newServiceName.trim() || !newServiceAddress.trim() || !newServicePort) {
+      Alert.alert("Error", "All fields are required")
+      return false
+    }
+
+    return true;
+  }
+
+  const resetForm = () => {
+    setNewServiceAddress("")
+    setNewServicePort("8765")
+  }
+
   const handleAddService = async () => {
-    if (!newServiceName.trim() || !newServiceUrl.trim()) {
-      Alert.alert("Error", "Please enter both name and URL")
-      return
+
+    if (!validateURL()) {
+      return;
     }
 
-    if (!newServiceUrl.startsWith("ws://") && !newServiceUrl.startsWith("wss://")) {
-      Alert.alert("Error", "URL must start with ws:// or wss://")
-      return
-    }
+    // const newServiceURL = `ws://${newServiceAddress}:${newServicePort}`
 
-    await addService(newServiceName, newServiceUrl)
+    await addService(newServiceName, newServiceAddress, newServicePort)
     setNewServiceName("")
-    setNewServiceUrl("ws://")
+    resetForm()
     setShowAddForm(false)
   }
 
@@ -98,10 +119,19 @@ export default function ConnectScreen() {
           />
           <TextInput
             style={styles.input}
-            placeholder="WebSocket URL (ws://192.168.1.100:9090)"
+            placeholder="192.168.1.10"
             placeholderTextColor="#666"
-            value={newServiceUrl}
-            onChangeText={setNewServiceUrl}
+            value={newServiceAddress}
+            onChangeText={setNewServiceAddress}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="8765"
+            placeholderTextColor="#666"
+            value={newServicePort}
+            onChangeText={setNewServicePort}
             autoCapitalize="none"
             autoCorrect={false}
           />
@@ -130,7 +160,7 @@ export default function ConnectScreen() {
                 )}
               </View>
               <View style={styles.serviceActions}>
-                <TouchableOpacity style={styles.connectButton} onPress={() => handleConnect(service.id, service.url, service.host)}>
+                <TouchableOpacity style={styles.connectButton} onPress={() => handleConnect(service.id, service.host, service.port)}>
                   <Text style={styles.connectButtonText}>Connect</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.removeButton} onPress={() => handleRemoveService(service.id)}>

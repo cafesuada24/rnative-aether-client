@@ -9,11 +9,10 @@ export default function TabLayout() {
       }}
     >
       <Stack.Screen
-        name="index"
+        name="connect"
         options={{
           headerShown: false,
-        }}
-      />
+        }} />
     </Stack>
   )
 }
