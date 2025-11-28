@@ -30,8 +30,6 @@ export default function HomeScreen() {
   const [activeTab, setActiveTab] = useState<TabType>("status")
   const [displayMode, setDisplayMode] = useState<DisplayMode>("camera")
   const [logs, setLogs] = useState<string[]>([])
-  const [serviceUrl, setServiceUrl] = useState<string | null>(null)
-  const [serviceHost, setServiceHost] = useState<string | null>(null);
   const [dropdownVisible, setDropdownVisible] = useState(false)
   const [chatMessages, setChatMessages] = useState<{ text: string; sender: "user" | "bot" }[]>([
     { text: "Hello! How can I assist you?", sender: "bot" },
@@ -47,19 +45,7 @@ export default function HomeScreen() {
     if (!ros.connected) {
       router.replace("./connect")
     }
-  }, [ros.connected, router])
-  // useEffect(() => {
-  //   const getWaypointsSrvCallback = (response: { waypoints: Waypoint[] }) => {
-  //     for (let i = 0; i < response.waypoints.length; ++i) {
-  //       response.waypoints[i].id = i.toString();
-  //     }
-  //     setWaypoints(response.waypoints)
-  //   }
-  //   const getWaypointsSrvFailedCallback = (error: string) => {
-  //     addLog(`Err: ${error}`)
-  //   }
-  //   ros.getWaypoints?.callService(null, getWaypointsSrvCallback, getWaypointsSrvFailedCallback)
-  // }, [ros.getWaypoints])
+  }, [ros.connected])
 
   const handleJoyMove = (data: IReactNativeJoystickEvent) => {
     ros.sendVelocity({ y: data.normalized.x, x: data.normalized.y, yaw: data.angle.radian });
@@ -67,21 +53,6 @@ export default function HomeScreen() {
   };
   const [chatInput, setChatInput] = useState("")
 
-  // const checkConnection = async () => {
-  //   try {
-  //     const stored = await AsyncStorage.getItem(SELECTED_SERVICE_KEY)
-  //     if (stored) {
-  //       const { url, host } = JSON.parse(stored)
-  //       setServiceUrl(url)
-  //       setServiceHost(host)
-  //       ros.connect(url)
-  //       setLogs((prev) => [...prev, `Connecting to ${url}...`])
-  //     }
-  //   } catch (error) {
-  //     console.log("[Err] Error checking connection:", error)
-  //     router.replace("./connect")
-  //   }
-  // }
   async function lockOrientation() {
     await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE)
   }
@@ -89,10 +60,6 @@ export default function HomeScreen() {
   async function unlockOrientation() {
     await ScreenOrientation.unlockAsync()
   }
-
-  // useEffect(() => {
-  //   checkConnection()
-  // }, [])
 
   useEffect(() => {
     if (ros.connected) {
