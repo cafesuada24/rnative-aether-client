@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useRef, useState } from "react";
 
-import * as ROSLIB from "@foxglove/roslibjs"
+import * as ROSLIB from "roslib"
 export interface IJoyCommand {
   x: number;
   y: number;
@@ -36,11 +36,18 @@ interface ROSContextValue {
   connect: (url: string, port: string) => void,
   disconnect: () => void,
   chatService: ROSLIB.Service,
+  saveMapService: ROSLIB.Service,
+  loadMapService: ROSLIB.Service,
+  getMapsService: ROSLIB.Service,
+  updateMapService: ROSLIB.Service,
+  deleteMapService: ROSLIB.Service,
   navStatus: NavStatusType,
   navFeedback: INavFeedback | null,
   odom: IOdom | null,
   currentHost: string | null,
   currentPort: string | null,
+  robotMode: RobotMode,
+  changeRobotModeAct: ROSLIB.Action,
 }
 
 const ROSContext = createContext<ROSContextValue | null>(null)
@@ -53,6 +60,11 @@ export const useROS = () => {
   return context;
 };
 
+export enum RobotMode{
+  NO_MODE,
+  MAPPING,
+  LOCALIZATION,
+}
 export const ROSProvider = ({ children }: { children: React.ReactNode }) => {
   const rosRef = useRef<ROSLIB.Ros | null>(null);
   const cmdVelRef = useRef<ROSLIB.Topic | null>(null);
@@ -61,7 +73,14 @@ export const ROSProvider = ({ children }: { children: React.ReactNode }) => {
   const navActionFeedbackSubRef = useRef<ROSLIB.Topic | null>(null);
   const navActionStatusSubRef = useRef<ROSLIB.Topic | null>(null);
   const odometryRef = useRef<ROSLIB.Topic | null>(null);
+  const getMapsSrvRef = useRef<ROSLIB.Service | null>(null);
+  const saveMapSrvRef = useRef<ROSLIB.Service | null>(null);
+  const loadMapSrvRef = useRef<ROSLIB.Service | null>(null);
+  const updateMapSrvRef = useRef<ROSLIB.Service | null>(null);
+  const deleteMapSrvRef = useRef<ROSLIB.Service | null>(null);
+  const changeRobotModeActRef = useRef<ROSLIB.Action | null>(null);
 
+  const [robotMode, setRobotMode] = useState<RobotMode>(RobotMode.NO_MODE);
   const [navFeedback, setNavFeedback] = useState<INavFeedback | null>(null);
   const [navStatus, setNavStatus] = useState<NavStatusType>(0)
   const [connected, setConnected] = useState<boolean>(false);
@@ -79,18 +98,21 @@ export const ROSProvider = ({ children }: { children: React.ReactNode }) => {
       navActionStatusSubRef.current = null;
       navActionFeedbackSubRef.current?.unsubscribe();
       navActionFeedbackSubRef.current = null;
+      changeRobotModeActRef.current = null
       odometryRef.current?.unsubscribe();
       odometryRef.current = null
       rosRef.current.close();
       rosRef.current = null;
 
+      getMapsSrvRef.current = null;
+      loadMapSrvRef.current = null;
+      saveMapSrvRef.current = null;
+
       setNavStatus(0);
       setNavFeedback(null);
       setOdom(null);
     }
-    if (connected) {
-      setConnected(false);
-    }
+    setConnected(false);
   }
 
   const connect = (url: string, port: string) => {
@@ -154,12 +176,68 @@ export const ROSProvider = ({ children }: { children: React.ReactNode }) => {
 
     const odometryTopic = new ROSLIB.Topic({
       ros: ros,
-      name: '/odom',
+      name: '/odometry/filtered',
       messageType: 'nav_msgs/msg/Odometry',
     })
 
     odometryTopic.subscribe((msg: any) => {
       setOdom(msg)
+    })
+
+    const getMapsService = new ROSLIB.Service({
+      ros: ros,
+      name: '/map_manager/get_maps',
+      serviceType: 'aether_interfaces/GetMaps',
+    })
+
+    const saveMapService = new ROSLIB.Service({
+      ros: ros,
+      name: '/map_manager/save_map',
+      serviceType: 'aether_interfaces/SaveMap',
+    })
+
+    const loadMapService = new ROSLIB.Service({
+      ros: ros,
+      name: '/map_manager/load_map',
+      serviceType: 'aether_interfaces/LoadMap',
+    })
+    const updateMapService = new ROSLIB.Service({
+      ros: ros,
+      name: '/map_manager/update_map',
+      serviceType: 'aether_interfaces/UpdateMap',
+    })
+
+    const deleteMapService = new ROSLIB.Service({
+      ros: ros,
+      name: '/map_manager/delete_map',
+      serviceType: 'aether_interfaces/DeleteMap',
+    })
+
+    const robotModeSub = new ROSLIB.Topic({
+      ros: ros,
+      name: '/robot_mode/status_update',
+      messageType: 'aether_interfaces/msg/RobotMode',
+      qos: {
+        durability: 'transient_local',
+        reliability: 'reliable',
+      },
+    })
+
+    robotModeSub.subscribe((msg: any) => {
+      console.log("Mode received: " + msg.mode)
+      if (msg.mode === 1) {
+        setRobotMode(RobotMode.MAPPING)
+      } else if (msg.mode === 2) {
+        setRobotMode(RobotMode.LOCALIZATION)
+      } else {
+        setRobotMode(RobotMode.NO_MODE)
+      }
+    })
+
+    const changeRobotModeAct = new ROSLIB.Action({
+      ros: ros,
+      name: '/robot_mode/change',
+      actionType: 'aether_interfaces/ChangeRobotMode',
     })
 
     ros.on('connection', function() {
@@ -173,6 +251,14 @@ export const ROSProvider = ({ children }: { children: React.ReactNode }) => {
       navActionFeedbackSubRef.current = navActionFeedbackTopic
       navActionStatusSubRef.current = navActionStatusTopic
       odometryRef.current = odometryTopic;
+
+      getMapsSrvRef.current = getMapsService;
+      loadMapSrvRef.current = loadMapService;
+      saveMapSrvRef.current = saveMapService;
+      updateMapSrvRef.current = updateMapService;
+      deleteMapSrvRef.current = deleteMapService;
+
+      changeRobotModeActRef.current = changeRobotModeAct;
 
       setConnected(true);
       console.log('Connected to websocket server');
@@ -210,11 +296,18 @@ export const ROSProvider = ({ children }: { children: React.ReactNode }) => {
     disconnect,
     // getWaypoints: getWaypointsServiceRef.current,
     chatService: chatServiceRef.current,
+    saveMapService: saveMapSrvRef.current,
+    loadMapService: loadMapSrvRef.current,
+    getMapsService: getMapsSrvRef.current,
+    updateMapService: updateMapSrvRef.current,
+    deleteMapService: deleteMapSrvRef.current,
     navStatus,
     navFeedback,
     odom,
     currentHost: url,
     currentPort: port,
+    robotMode,
+    changeRobotModeAct: changeRobotModeActRef.current
   };
 
   return (

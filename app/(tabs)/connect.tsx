@@ -152,7 +152,7 @@ export default function ConnectScreen() {
             <View key={service.id} style={styles.serviceCard}>
               <View style={styles.serviceInfo}>
                 <Text style={styles.serviceName}>{service.name}</Text>
-                <Text style={styles.serviceUrl}>{service.url}</Text>
+                <Text style={styles.serviceUrl}>{service.host}:{service.port}</Text>
                 {service.lastConnected && (
                   <Text style={styles.serviceLastConnected}>
                     Last connected: {new Date(service.lastConnected).toLocaleString()}

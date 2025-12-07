@@ -3,7 +3,7 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
-    "start": "expo start",
+    "start": "NODE_OPTIONS=--experimental-fetch expo start",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo run:android",
     "ios": "expo run:ios",
@@ -17,9 +17,11 @@
     "@google/genai": "^1.25.0",
     "@inthepocket/react-native-service-discovery": "^0.2.2",
     "@modelcontextprotocol/sdk": "^1.20.1",
+    "@react-native-async-storage/async-storage": "^2.2.0",
     "@react-navigation/bottom-tabs": "^7.4.0",
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.8",
+    "@tier4/roslibjs-foxglove": "https://github.com/tier4/roslibjs-foxglove/releases/download/v0.0.4/tier4-roslibjs-foxglove-0.0.4.tgz",
     "expo": "~54.0.10",
     "expo-build-properties": "~1.0.9",
     "expo-constants": "~18.0.9",
@@ -45,7 +47,9 @@
     "react-native-web": "~0.21.0",
     "react-native-webview": "^13.16.0",
     "react-native-worklets": "0.5.1",
-    "ros2d": "^0.10.0"
+    "ros2d": "^0.10.0",
+    "roslib": "github:RobotWebTools/roslibjs#ros2-actions-no-typescript",
+    "stringify": "^5.2.0"
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
